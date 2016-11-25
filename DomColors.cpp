@@ -6,23 +6,35 @@
 
 #pragma warning(disable: 4244 4267)
 
-std::vector<cv::Scalar> GetDomColors(cv::Mat hist, double max_sum, int max_count)
+
+dominant_colors_graber::dominant_colors_graber(color_space cs, dist_type dt,
+				unsigned colors_count, double colors_part):
+_cs(cs), _dt(dt), _colors_count(colors_count), _colors_part(colors_part)
 {
+	
+}
+std::vector<cv::Scalar> dominant_colors_graber::GetDomColors(cv::Mat img,
+		color_space cs,	dist_type dt, unsigned colors_count, double colors_part)
+{
+	if(cs == CS_UNDEFINED)
+		cs = _cs;
+	if(dt == DT_UNDEFINED)
+		dt = _dt;
+	if(colors_count == 0)
+		colors_count = _colors_count;
+	if(colors_part == 0)
+		colors_part = _colors_part;
+	cv::Mat hist = GetHist(img, cs);
+	cv::Scalar full_w = sum(hist);
+	hist /= full_w[0];
 	double sum = 0;
-	std::vector<cv::Scalar> res;
-	cv::Vec3i cube_size = {HIST_SIZE_H/9, HIST_SIZE_S/4, HIST_SIZE_V/4};
-	float cie_dist = 20;
-#ifdef RGB_HIST
-	cube_size[0] = HIST_SIZE_B/8;
-	cube_size[1] = HIST_SIZE_G/8;
-	cube_size[2] = HIST_SIZE_R/8;
-#endif
-#ifdef CIE_DIST
-	cube_size[0] = cie_dist;
-#endif
 	cv::Mat hist_mask = cv::Mat::Mat(3, hist.size, CV_8UC1, cv::Scalar(255));
 	cv::Mat center_mask = hist_mask.clone();
-	while((res.size() < max_count) && (sum <= max_sum))
+	std::vector<cv::Scalar> res;
+	std::vector<float> koefs = {hist_ranges[cs][1]/hist_sizes[cs][0],
+								hist_ranges[cs][3]/hist_sizes[cs][1],
+								hist_ranges[cs][5]/hist_sizes[cs][2]};
+	while((res.size() < colors_count) && (sum <= colors_part/100.0))
 	{
 		center_mask *= 0;
 		int max_pos[3] = {0, 0, 0};
@@ -30,9 +42,12 @@ std::vector<cv::Scalar> GetDomColors(cv::Mat hist, double max_sum, int max_count
 		cv::minMaxIdx(hist, NULL, &max_val, NULL, max_pos, hist_mask);
 		cv::Point3i max_loc(max_pos[0], max_pos[1], max_pos[2]);
 		// getting center and sum
-		MarkNearColors(center_mask, max_loc, cube_size, 255); //mark near
+		MarkNearColors(center_mask, max_loc, _param, 255, cs, dt); //mark near
 		cv::Vec4f center_sum = GetCenter(hist, center_mask, hist_mask); // get center of near-maximum area
 		sum += center_sum[3];
+		center_sum[0] *= koefs[0];
+		center_sum[1] *= koefs[1];
+		center_sum[2] *= koefs[2];
 		res.push_back(center_sum);
 		// exclude near-maximum cells
 		center_mask = 255 - center_mask;
@@ -40,24 +55,152 @@ std::vector<cv::Scalar> GetDomColors(cv::Mat hist, double max_sum, int max_count
 	}
 	return res;
 }
-void MarkNearColors(cv::Mat mask, cv::Point3i center, cv::Vec3f size, unsigned char value)
+#pragma region SET/GET
+void dominant_colors_graber::SetDistanceType(dist_type dt)
+{
+	if(dt != DT_UNDEFINED)
+		_dt = dt;
+}
+dist_type dominant_colors_graber::GetDistanceType()
+{
+	return _dt;
+}
+void dominant_colors_graber::SetColorSpace(color_space cs)
+{
+	if(cs != CS_UNDEFINED)
+		_cs = cs;
+}
+color_space dominant_colors_graber::GetColorSpace()
+{
+	return _cs;
+}
+void dominant_colors_graber::SetColorsCount(unsigned colors_count)
+{
+	if(colors_count != 0)
+		_colors_count = colors_count;
+}
+unsigned dominant_colors_graber::GetColorsCount()
+{
+	return _colors_count;
+}
+void dominant_colors_graber::SetColorsPart(double colors_part)
+{
+	if(colors_part > 0)
+		_colors_part = colors_part;
+}
+double dominant_colors_graber::GetColorsPart()
+{
+	return _colors_part;
+}
+void dominant_colors_graber::SetParam(cv::Vec3i param)
+{
+	_param = param;
+}
+cv::Vec3i dominant_colors_graber::GetParam()
+{
+	return _param;
+}
+#pragma endregion
+void MarkNearColors(cv::Mat mask, cv::Point3i center, cv::Vec3f size, 
+					unsigned char value, color_space cs, dist_type dt)
 {
 	std::vector<bool> cyclic_dims = {1, 0, 0}; // hue channel is cyclic
-#ifdef RGB_HIST
-	cyclic_dims[0] = false;
-#endif
-#ifdef CIE_DIST
-	MarkNearColorsCIE(mask, center, size[0], value);
-#else
-	DrawCube(mask, center, size, value, cyclic_dims);
-#endif
+	switch(cs)
+	{
+	case CS_BGR:
+		cyclic_dims[0] = false;
+		break;
+	}
+	switch(dt)
+	{
+	case DT_CIE76:
+		MarkNearColorsCIE(mask, center, size[0], value, cs, dt);
+		break;
+	case DT_CUBE:
+		DrawCube<unsigned char>(mask, center, size, value, cyclic_dims);
+		break;
+	}
 }
-void DrawCube(cv::Mat img, cv::Point3i center, cv::Vec3i size, unsigned char value, std::vector<bool> cyclic)
+void MarkNearColorsCIE(cv::Mat mask, cv::Point3i color, double dist, unsigned char value, color_space cs, dist_type dt)
+{
+	cv::Vec3i center_color;
+	std::vector<float> koefs = {hist_ranges[cs][1]/hist_sizes[cs][0],
+								hist_ranges[cs][3]/hist_sizes[cs][1],
+								hist_ranges[cs][5]/hist_sizes[cs][2]};
+	center_color[0] = color.x * koefs[0];
+	center_color[1] = color.y * koefs[1];
+	center_color[2] = color.z * koefs[2];
+
+	for(int i1 = 0; i1 < mask.size[0]; i1++)
+	for(int i2 = 0; i2 < mask.size[1]; i2++)
+	for(int i3 = 0; i3 < mask.size[2]; i3++)
+	{
+		cv::Vec3i cl(i1, i2, i3);
+		cl[0] *= koefs[0];
+		cl[1] *= koefs[1];
+		cl[2] *= koefs[2];
+		cv::Vec3i p(i1, i2, i3);
+		double color_dist;
+		switch(dt)
+		{
+		case DT_CIE76:
+			color_dist = GetCIE76Dist(cl, center_color, cs);
+			break;
+		}
+		if(color_dist < dist)
+		{
+			mask.at<unsigned char>(p) = value;
+		}
+	}
+}
+double GetCIE76Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs)
+{
+	double res = 0;
+	cv::Mat colors(1, 2, CV_8UC3);
+	colors.at<cv::Vec3b>(0, 0) = c1;
+	colors.at<cv::Vec3b>(0, 1) = c2;
+	switch(cs)
+	{
+	case CS_HSV:
+		cv::cvtColor(colors, colors, CV_HSV2BGR);
+		break;
+	}
+	cv::cvtColor(colors, colors, CV_BGR2Lab);
+	c1 = colors.at<cv::Vec3b>(0, 0);
+	c2 = colors.at<cv::Vec3b>(0, 1);
+	res = cv::norm(c1 - c2);
+	return res;
+}
+cv::Mat GetHist(cv::Mat img, color_space cs)
+{
+	cv::Mat img_colors;
+	std::vector<int> channels = {0, 1, 2};
+	switch(cs)
+	{
+	case CS_BGR:
+	{
+		img.copyTo(img_colors);
+	}
+		break;
+	case CS_HSV:
+	{
+		cvtColor(img, img_colors, CV_BGR2HSV);
+	}
+		break;
+	}
+	std::vector<cv::Mat> img_channels;
+	cv::split(img_colors, img_channels);
+	cv::Mat color_hist;
+	cv::calcHist(img_channels, channels, cv::Mat(), color_hist, hist_sizes[cs], hist_ranges[cs]); // 3D histogram
+	return color_hist;
+}
+
+template<class val_type>void DrawCube(cv::Mat img, cv::Point3i center, cv::Vec3i size, val_type value, std::vector<bool> cyclic)
 {
 	std::vector<cv::Vec3i> p = GetGabarits(center, size);
-	return DrawCube(img, p[0], p[1], value, cyclic);
+	return DrawCube<val_type>(img, p[0], p[1], value, cyclic);
 }
-void DrawCube(cv::Mat img, cv::Vec3i p1, cv::Vec3i p2, unsigned char value, std::vector<bool> cyclic)
+template<class val_type>void DrawCube(cv::Mat img, cv::Vec3i p1, cv::Vec3i p2, val_type value, std::vector<bool> cyclic)
 {
 	for(unsigned i = 0; i < cyclic.size(); i++) // cut cubes if non cyclic
 		if(!cyclic[i])
@@ -71,7 +214,7 @@ void DrawCube(cv::Mat img, cv::Vec3i p1, cv::Vec3i p2, unsigned char value, std:
 	{
 		cv::Vec3i p(i1, i2, i3);
 		CyclePoint3d(p, img.size);
-		img.at<unsigned char>(p) = value; // uchar because of mask
+		img.at<val_type>(p) = value; // uchar because of mask
 	}
 }
 cv::Vec4f GetCenter(cv::Mat img, cv::Mat w_mask, cv::Mat v_mask)
@@ -103,54 +246,6 @@ cv::Vec4f GetCenter(cv::Mat img, cv::Mat w_mask, cv::Mat v_mask)
 	res[2] = center[2];
 	return res;
 }
-double GetCIEDist(cv::Vec3i c1, cv::Vec3i c2)
-{
-	double res = 0;
-	cv::Mat colors(1, 2, CV_8UC3);
-	colors.at<cv::Vec3b>(0, 0) = c1;
-	colors.at<cv::Vec3b>(0, 1) = c2;
-#ifndef RGB_HIST
-	cv::cvtColor(colors, colors, CV_HSV2BGR);
-#endif
-	cv::cvtColor(colors, colors, CV_BGR2Lab);
-	c1 = colors.at<cv::Vec3b>(0, 0);
-	c2 = colors.at<cv::Vec3b>(0, 1);
-	res = cv::norm(c1 - c2);
-	return res;
-}
-void MarkNearColorsCIE(cv::Mat mask, cv::Point3i color, double dist, unsigned char value)
-{
-	cv::Vec3i center_color;
-#ifdef RGB_HIST
-	center_color[0] = color.x * 256.0/HIST_SIZE_B;
-	center_color[1] = color.y * 256.0/HIST_SIZE_G;
-	center_color[2] = color.z * 256.0/HIST_SIZE_R;
-#else
-	center_color[0] = color.x * 180.0/HIST_SIZE_H;
-	center_color[1] = color.y * 256.0/HIST_SIZE_S;
-	center_color[2] = color.z * 256.0/HIST_SIZE_V;
-#endif
-	for(int i1 = 0; i1 < mask.size[0]; i1++)
-	for(int i2 = 0; i2 < mask.size[1]; i2++)
-	for(int i3 = 0; i3 < mask.size[2]; i3++)
-	{
-		cv::Vec3i cl(i1, i2, i3);
-#ifdef RGB_HIST
-		cl[0] *= 256.0/HIST_SIZE_B;
-		cl[1] *= 256.0/HIST_SIZE_G;
-		cl[2] *= 256.0/HIST_SIZE_R;
-#else
-		cl[0] *= 180.0/HIST_SIZE_H;
-		cl[1] *= 256.0/HIST_SIZE_S;
-		cl[2] *= 256.0/HIST_SIZE_V;
-#endif
-		cv::Vec3i p(i1, i2, i3);
-		if(GetCIEDist(cl, center_color) < dist)
-		{
-			mask.at<unsigned char>(p) = value;
-		}
-	}
-}
 
 std::vector<cv::Vec3i> GetGabarits(cv::Point3i center, cv::Vec3i size)
 {
@@ -177,52 +272,18 @@ void CyclePoint3d(cv::Vec3i& p, cv::MatSize size)
 		p[i] = CycleRange(p[i], 0, size[i]);
 }
 
-cv::Mat ShowColors(cv::Mat img)
+cv::Mat ShowColors(cv::Mat img, std::vector<cv::Scalar> colors, unsigned color_height)
 {
 	cv::Mat img_colors;
-#ifdef RGB_HIST
-	std::vector<int> channels = {0, 1, 2};
-	std::vector<int> hist_size = {HIST_SIZE_B, HIST_SIZE_G, HIST_SIZE_R};
-	std::vector<float> ranges = {0, 256, 0, 256, 0, 256};
-	std::vector<cv::Mat> bgr_channels;
-	cv::split(img, bgr_channels);
-	cv::Mat color_hist;
-	cv::calcHist(bgr_channels, channels, cv::Mat(), color_hist, hist_size, ranges); // 3D histogram
-	cv::copyMakeBorder(img, img_colors, COLOR_HEIGHT, 0, 0, 0,
+	cv::copyMakeBorder(img, img_colors, color_height, 0, 0, 0,
 							cv::BORDER_CONSTANT, cv::Scalar::all(0));
-#else
-	cv::Mat img_hsv;
-	cvtColor(img, img_hsv, CV_BGR2HSV);
-	std::vector<int> channels = {0, 1, 2};
-	std::vector<int> hist_size = {HIST_SIZE_H, HIST_SIZE_S, HIST_SIZE_V};
-	std::vector<float> ranges = {0, 180, 0, 256, 0, 256};
-	std::vector<cv::Mat> hsv_channels;
-	cv::split(img_hsv, hsv_channels);
-	cv::Mat color_hist;
-	cv::calcHist(hsv_channels, channels, cv::Mat(), color_hist, hist_size, ranges); // 3D histogram
-	cv::copyMakeBorder(img_hsv, img_colors, COLOR_HEIGHT, 0, 0, 0,
-							cv::BORDER_CONSTANT, cv::Scalar::all(0));
-#endif
-	cv::Scalar full_w = cv::sum(color_hist);
-	color_hist /= full_w[0]; 
-	std::vector<cv::Scalar> colors = GetDomColors(color_hist, DOM_COLORS_PART/100.0, DOM_COLORS_COUNT);
-	cv::Rect color_rect(cv::Point(0, 0), cv::Size(img_colors.cols / colors.size(), COLOR_HEIGHT));
+	cv::Rect color_rect(cv::Point(0, 0), cv::Size(img_colors.cols / colors.size()-1, color_height));
 	for(unsigned i = 0; i < colors.size(); i++)
 	{
-#ifdef RGB_HIST
-		colors[i][0] = colors[i][0] * (ranges[1]/HIST_SIZE_B) + (ranges[1]/HIST_SIZE_B);
-		colors[i][1] = colors[i][1] * (ranges[3]/HIST_SIZE_G) + (ranges[3]/HIST_SIZE_G);
-		colors[i][2] = colors[i][2] * (ranges[5]/HIST_SIZE_R) + (ranges[5]/HIST_SIZE_R);
-#else
-		colors[i][0] = colors[i][0] * (ranges[1]/HIST_SIZE_H) + (ranges[1]/HIST_SIZE_H);
-		colors[i][1] = colors[i][1] * (ranges[3]/HIST_SIZE_S) + (ranges[3]/HIST_SIZE_S);
-		colors[i][2] = colors[i][2] * (ranges[5]/HIST_SIZE_V) + (ranges[5]/HIST_SIZE_V);
-#endif
 		color_rect.x = (color_rect.width + 1) * i;
 		cv::rectangle(img_colors, color_rect, colors[i], CV_FILLED);
 	}
-#ifndef RGB_HIST
-	cvtColor(img_colors, img_colors, CV_HSV2BGR);
-#endif
 	return img_colors;
 }
+const std::vector<int> hist_sizes[2] = {{16, 16, 16}, {18, 8, 8}};
+const std::vector<float> hist_ranges[2] = {{0, 256, 0, 256, 0, 256}, {0, 180, 0, 256, 0, 256}};
