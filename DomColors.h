@@ -13,7 +13,8 @@ enum dist_type
 {
 	DT_UNDEFINED = -1,
 	DT_CUBE = 0,
-	DT_CIE76
+	DT_CIE76,
+	DT_KMEANS
 };
 
 #define DOM_COLORS_COUNT_DEFAULT		8

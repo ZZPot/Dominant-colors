@@ -24,34 +24,61 @@ std::vector<cv::Scalar> dominant_colors_graber::GetDomColors(cv::Mat img,
 		colors_count = _colors_count;
 	if(colors_part == 0)
 		colors_part = _colors_part;
-	cv::Mat hist = GetHist(img, cs);
-	cv::Scalar full_w = sum(hist);
-	hist /= full_w[0];
-	double sum = 0;
-	cv::Mat hist_mask = cv::Mat::Mat(3, hist.size, CV_8UC1, cv::Scalar(255));
-	cv::Mat center_mask = hist_mask.clone();
 	std::vector<cv::Scalar> res;
-	std::vector<float> koefs = {hist_ranges[cs][1]/hist_sizes[cs][0],
-								hist_ranges[cs][3]/hist_sizes[cs][1],
-								hist_ranges[cs][5]/hist_sizes[cs][2]};
-	while((res.size() < colors_count) && (sum <= colors_part/100.0))
+	if(dt == DT_KMEANS)
 	{
-		center_mask *= 0;
-		int max_pos[3] = {0, 0, 0};
-		double max_val;
-		cv::minMaxIdx(hist, NULL, &max_val, NULL, max_pos, hist_mask);
-		cv::Point3i max_loc(max_pos[0], max_pos[1], max_pos[2]);
-		// getting center and sum
-		MarkNearColors(center_mask, max_loc, _param, 255, cs, dt); //mark near
-		cv::Vec4f center_sum = GetCenter(hist, center_mask, hist_mask); // get center of near-maximum area
-		sum += center_sum[3];
-		center_sum[0] *= koefs[0];
-		center_sum[1] *= koefs[1];
-		center_sum[2] *= koefs[2];
-		res.push_back(center_sum);
-		// exclude near-maximum cells
-		center_mask = 255 - center_mask;
-		bitwise_and(hist_mask, center_mask, hist_mask);	
+		cv::Mat img_cs;
+		switch(cs)
+		{
+		case CS_HSV:
+			cv::cvtColor(img, img_cs, CV_BGR2HSV);
+			break;
+		case CS_BGR:
+			img.copyTo(img_cs);
+		}
+		cv::Mat img_samples = img_cs.reshape(1, img.cols*img.rows);
+		img_samples.convertTo(img_samples, CV_32F);
+		cv::TermCriteria term_crit(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 5, 1.0);
+		cv::Mat labels, colors_mat;
+		cv::kmeans(img_samples, colors_count, labels, term_crit, 5, cv::KMEANS_PP_CENTERS, colors_mat);
+		colors_mat = colors_mat.reshape(3);
+		res.resize(colors_mat.rows);
+		for(unsigned i = 0; i < colors_mat.rows; i++)
+		{
+			res[i] = colors_mat.at<cv::Vec3f>(i, 0);
+		}
+	}
+	else
+	{
+		cv::Mat hist = GetHist(img, cs);
+		cv::Scalar full_w = sum(hist);
+		hist /= full_w[0];
+		double sum = 0;
+		cv::Mat hist_mask = cv::Mat::Mat(3, hist.size, CV_8UC1, cv::Scalar(255));
+		cv::Mat center_mask = hist_mask.clone();
+	
+		std::vector<float> koefs = {hist_ranges[cs][1]/hist_sizes[cs][0],
+									hist_ranges[cs][3]/hist_sizes[cs][1],
+									hist_ranges[cs][5]/hist_sizes[cs][2]};
+		while((res.size() < colors_count) && (sum <= colors_part/100.0))
+		{
+			center_mask *= 0;
+			int max_pos[3] = {0, 0, 0};
+			double max_val;
+			cv::minMaxIdx(hist, NULL, &max_val, NULL, max_pos, hist_mask);
+			cv::Point3i max_loc(max_pos[0], max_pos[1], max_pos[2]);
+			// getting center and sum
+			MarkNearColors(center_mask, max_loc, _param, 255, cs, dt); //mark near
+			cv::Vec4f center_sum = GetCenter(hist, center_mask, hist_mask); // get center of near-maximum area
+			sum += center_sum[3];
+			center_sum[0] *= koefs[0];
+			center_sum[1] *= koefs[1];
+			center_sum[2] *= koefs[2];
+			res.push_back(center_sum);
+			// exclude near-maximum cells
+			center_mask = 255 - center_mask;
+			bitwise_and(hist_mask, center_mask, hist_mask);	
+		}
 	}
 	return res;
 }
