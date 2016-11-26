@@ -10,4 +10,4 @@ HSV histogram good for natural colors, like landscapes. Example provided.
 
 NOTE: function GetCenter() has "val = 0;" code. Commenting it leads to changing results in both directions. Didn't decide what to do with that.
 
-CIE distance, cube size and histogram bins are set experimentally. Algorithm is still plastic lame and weak.
+CIE distance, cube size and histogram bins are set experimentally.
