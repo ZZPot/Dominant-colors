@@ -14,6 +14,7 @@ enum dist_type
 	DT_UNDEFINED = -1,
 	DT_CUBE = 0,
 	DT_CIE76,
+	DT_CIE94,
 	DT_KMEANS
 };
 
@@ -59,6 +60,7 @@ template<class val_type> void DrawCube(cv::Mat img, cv::Vec3i p1, cv::Vec3i p2, 
 void MarkNearColors(cv::Mat mask, cv::Point3i center, cv::Vec3f size, unsigned char value, color_space cs, dist_type dt);
 void MarkNearColorsCIE(cv::Mat mask, cv::Point3i color, double dist, unsigned char value, color_space cs, dist_type dt);
 double GetCIE76Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs);
+double GetCIE94Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs);
 
 cv::Vec4f GetCenter(cv::Mat img, cv::Mat w_mask, cv::Mat v_mask = cv::Mat());
 std::vector<cv::Vec3i> GetGabarits(cv::Point3i center, cv::Vec3i size);

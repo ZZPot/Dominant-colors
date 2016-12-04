@@ -141,6 +141,7 @@ void MarkNearColors(cv::Mat mask, cv::Point3i center, cv::Vec3f size,
 	switch(dt)
 	{
 	case DT_CIE76:
+	case DT_CIE94:
 		MarkNearColorsCIE(mask, center, size[0], value, cs, dt);
 		break;
 	case DT_CUBE:
@@ -173,6 +174,9 @@ void MarkNearColorsCIE(cv::Mat mask, cv::Point3i color, double dist, unsigned ch
 		case DT_CIE76:
 			color_dist = GetCIE76Dist(cl, center_color, cs);
 			break;
+		case DT_CIE94:
+			color_dist = GetCIE94Dist(cl, center_color, cs);
+			break;
 		}
 		if(color_dist < dist)
 		{
@@ -196,6 +200,34 @@ double GetCIE76Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs)
 	c1 = colors.at<cv::Vec3b>(0, 0);
 	c2 = colors.at<cv::Vec3b>(0, 1);
 	res = cv::norm(c1 - c2);
+	return res;
+}
+double GetCIE94Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs)
+{
+	double res = 0;
+	cv::Mat colors(1, 2, CV_8UC3);
+	colors.at<cv::Vec3b>(0, 0) = c1;
+	colors.at<cv::Vec3b>(0, 1) = c2;
+	switch(cs)
+	{
+	case CS_HSV:
+		cv::cvtColor(colors, colors, CV_HSV2BGR);
+		break;
+	}
+	double D76 = GetCIE76Dist(c1, c2, cs);
+	cv::cvtColor(colors, colors, CV_BGR2Lab);
+	c1 = colors.at<cv::Vec3b>(0, 0);
+	c2 = colors.at<cv::Vec3b>(0, 1);
+	double dL = c1[0] - c2[0];
+	double C1 = sqrt(c1[1]*c1[1] + c1[2]*c1[2]);
+	double C2 = sqrt(c2[1]*c2[1] + c2[2]*c2[2]);
+	double dC = C1 - C2;
+	double dH = sqrt(D76*D76 - dL*dL - dC*dC);
+	double k1 = 0.045, k2 = 0.015;
+	double kC, kH, kL;
+	kC = kH = kL = 1;
+	double SL = 1, SC = 1 + k1*C1, SH = 1 + k2*C1;
+	res = sqrt(pow(dL/(kL*SL), 2) + pow(dC/(kC*SC), 2) + pow(dH/(kH*SH), 2));
 	return res;
 }
 cv::Mat GetHist(cv::Mat img, color_space cs)
