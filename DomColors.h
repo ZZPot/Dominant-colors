@@ -17,7 +17,7 @@ enum dist_type
 	DT_KMEANS
 };
 
-#define DOM_COLORS_COUNT_DEFAULT		8
+#define DOM_COLORS_COUNT_DEFAULT		12
 #define DOM_COLORS_PART_DEFAULT			95 // colors % of whole image
 #define DOM_COLORS_COLOR_SPACE_DEFAULT	color_space::CS_BGR
 #define DOM_COLORS_DIST_TYPE_DEFAULT	dist_type::DT_CUBE
