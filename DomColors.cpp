@@ -31,7 +31,7 @@ std::vector<cv::Scalar> dominant_colors_graber::GetDomColors(cv::Mat img,
 		switch(cs)
 		{
 		case CS_HSV:
-			cv::cvtColor(img, img_cs, CV_BGR2HSV);
+			cv::cvtColor(img, img_cs, cv::COLOR_BGR2HSV);
 			break;
 		case CS_BGR:
 			img.copyTo(img_cs);
@@ -193,10 +193,10 @@ double GetCIE76Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs)
 	switch(cs)
 	{
 	case CS_HSV:
-		cv::cvtColor(colors, colors, CV_HSV2BGR);
+		cv::cvtColor(colors, colors, cv::COLOR_HSV2BGR);
 		break;
 	}
-	cv::cvtColor(colors, colors, CV_BGR2Lab);
+	cv::cvtColor(colors, colors, cv::COLOR_BGR2Lab);
 	c1 = colors.at<cv::Vec3b>(0, 0);
 	c2 = colors.at<cv::Vec3b>(0, 1);
 	res = cv::norm(c1 - c2);
@@ -211,11 +211,11 @@ double GetCIE94Dist(cv::Vec3i c1, cv::Vec3i c2, color_space cs)
 	switch(cs)
 	{
 	case CS_HSV:
-		cv::cvtColor(colors, colors, CV_HSV2BGR);
+		cv::cvtColor(colors, colors, cv::COLOR_HSV2BGR);
 		break;
 	}
 	double D76 = GetCIE76Dist(c1, c2, cs);
-	cv::cvtColor(colors, colors, CV_BGR2Lab);
+	cv::cvtColor(colors, colors, cv::COLOR_BGR2Lab);
 	c1 = colors.at<cv::Vec3b>(0, 0);
 	c2 = colors.at<cv::Vec3b>(0, 1);
 	double dL = c1[0] - c2[0];
@@ -243,7 +243,7 @@ cv::Mat GetHist(cv::Mat img, color_space cs)
 		break;
 	case CS_HSV:
 	{
-		cvtColor(img, img_colors, CV_BGR2HSV);
+		cvtColor(img, img_colors, cv::COLOR_BGR2HSV);
 	}
 		break;
 	}
@@ -336,11 +336,11 @@ cv::Mat ShowColors(cv::Mat img, std::vector<cv::Scalar> colors, unsigned color_h
 	cv::Mat img_colors;
 	cv::copyMakeBorder(img, img_colors, color_height, 0, 0, 0,
 							cv::BORDER_CONSTANT, cv::Scalar::all(0));
-	cv::Rect color_rect(cv::Point(0, 0), cv::Size(img_colors.cols / colors.size()-1, color_height));
+	cv::Rect2d color_rect(cv::Point(0, 0), cv::Size((double)img_colors.cols / colors.size(), color_height));
 	for(unsigned i = 0; i < colors.size(); i++)
 	{
-		color_rect.x = (color_rect.width + 1) * i;
-		cv::rectangle(img_colors, color_rect, colors[i], CV_FILLED);
+		cv::rectangle(img_colors, color_rect, colors[i], cv::FILLED);
+		color_rect.x += color_rect.width;
 	}
 	return img_colors;
 }

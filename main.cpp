@@ -1,4 +1,5 @@
 #include "DomColors.h"
+#include "common.h"
 #include <opencv2/imgproc.hpp>
 #include <opencv2/highgui.hpp>
 #include <iostream>
@@ -18,8 +19,6 @@
 
 #define IMG_WIDTH	400
 
-std::string ChooseFile(HWND hWndOwner, LPCSTR pCaption);
-
 int main()
 {
 	std::string img_file = ChooseFile(NULL, "Choose image");
@@ -28,7 +27,7 @@ int main()
 	cv::Mat img = cv::imread(img_file);
 	cv::resize(img, img, cv::Size(IMG_WIDTH, (double)img.rows/img.cols * IMG_WIDTH));
 	cv::Mat img_hsv;
-	cv::cvtColor(img, img_hsv, CV_BGR2HSV);
+	cv::cvtColor(img, img_hsv, cv::COLOR_BGR2HSV);
 
 	dominant_colors_graber dcg;
 	cv::Vec3i cube_param_rgb = {1, 1, 1};
@@ -52,10 +51,10 @@ int main()
 	cv::Mat img_rgb_cie94 = ShowColors(img, dcg.GetDomColors(img, CS_BGR, DT_CIE94));
 	cv::Mat img_hsv_cie94 = ShowColors(img_hsv, dcg.GetDomColors(img, CS_HSV, DT_CIE94));
 
-	cv::cvtColor(img_hsv_cube, img_hsv_cube, CV_HSV2BGR);
-	cv::cvtColor(img_hsv_cie76, img_hsv_cie76, CV_HSV2BGR);
-	cv::cvtColor(img_hsv_kmeans, img_hsv_kmeans, CV_HSV2BGR);
-	cv::cvtColor(img_hsv_cie94, img_hsv_cie94, CV_HSV2BGR);
+	cv::cvtColor(img_hsv_cube, img_hsv_cube, cv::COLOR_HSV2BGR);
+	cv::cvtColor(img_hsv_cie76, img_hsv_cie76, cv::COLOR_HSV2BGR);
+	cv::cvtColor(img_hsv_kmeans, img_hsv_kmeans, cv::COLOR_HSV2BGR);
+	cv::cvtColor(img_hsv_cie94, img_hsv_cie94, cv::COLOR_HSV2BGR);
 
 	cv::imshow(WND_NAME_RGB_CUBE, img_rgb_cube);
 	cv::imshow(WND_NAME_RGB_CIE76, img_rgb_cie76);
@@ -67,22 +66,4 @@ int main()
 	cv::imshow(WND_NAME_HSV_CIE94, img_hsv_cie94);
 	char key = cv::waitKey(0);
 	return 0;
-}
-
-std::string ChooseFile(HWND hWndOwner, LPCSTR pCaption)
-{
-	std::string res = "";
-	OPENFILENAME ofn;
-	memset(&ofn, 0, sizeof(ofn));
-	ofn.lStructSize = sizeof(OPENFILENAME);
-	ofn.hwndOwner = hWndOwner;
-	ofn.lpstrFilter = "All files\0*\0";
-	ofn.lpstrFile = new TCHAR[MAX_PATH*2]; ofn.lpstrFile[0] = '\0';
-	ofn.nMaxFile = MAX_PATH*2-1;
-	ofn.lpstrTitle = pCaption;
-	ofn.Flags = OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-	if(GetOpenFileName(&ofn))
-		res = ofn.lpstrFile;
-	delete [] ofn.lpstrFile;
-	return res;
 }
